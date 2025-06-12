@@ -1,14 +1,11 @@
 #!/bin/bash
-# Note 1: Ensure the following software is installed on your system before running this script:
+
+# Note: Ensure the following software is installed on your system before running this script:
 # - FastQC
 # - Bowtie2
 # - Samtools
 # - Bedtools
-# - bedGraphToBigWig (UCSC utilities)
-# Note 2: Ensure the following R packages are installed:
-# - readr
-# - preprocessCore
-# - DNAcopy
+# - bedGraphToBigWig (UCSC tools)
 
 # Set paths and parameters
 BOWTIE2_INDEX="/path/to/bowtie2index"
@@ -58,6 +55,11 @@ echo -e "chr\tstart\tstop\t"`ls $WORKDIR/output/*RT.bedGraph | sed 's/\ /\t/g'` 
 bedtools unionbedg -filler "NA" -i $WORKDIR/output/*RT.bedGraph >> $WORKDIR/output/merge_RT.txt
 
 # Step 4: Perform quantile normalization and loess smoothing in R
+# Note: Ensure the following R packages are installed before running the R script:
+# - readr
+# - preprocessCore
+# - DNAcopy
+
 echo "Performing quantile normalization and loess smoothing in R..."
 Rscript - <<EOF
 library(readr)
@@ -123,31 +125,4 @@ for file in $WORKDIR/output/*.Loess.bedGraph; do
     bedGraphToBigWig $file $GENOME_SIZES ${file%.bedGraph}.bigwig
 done
 
-# Optional: Assess reproducibility of replicates through correlation analysis
-# Note: The actual implementation of this step depends on the specific requirements and is not included in this script
-
-# Step 5: Segmentation of RT bins
-echo "Performing segmentation of RT bins in R..."
-Rscript - <<EOF
-library(DNAcopy)
-library(readr)
-
-setwd("$WORKDIR/output")
-
-# Load table with loess-smoothened normalized RT values
-dat_loess <- data.frame(read_delim("merge_Loess_norm_RT.txt", delim = "\t", escape_double = FALSE, trim_ws = TRUE))
-dat_loess <- dat_loess[complete.cases(dat_loess),]
-colnames(dat_loess)[4:ncol(dat_loess)] <- gsub(".bg", "", colnames(dat_loess)[4:ncol(dat_loess)])
-dat_loess$start <- as.integer(dat_loess$start)
-dat_loess$stop <- as.integer(dat_loess$stop)
-
-# Perform segmentation of the whole genome with selected parameters
-input <- dat_loess
-undo.SD <- 5  # Choose optimized parameter here
-alpha <- 1e-15 # Choose optimized parameter here
-
-dat.cna <- CNA(input$mysample.averageRT, input$chr, input$start, data.type = "logratio", sampleid = "My Sample")
-seg.cna <- segment(dat.cna, nperm = 10000, alpha = alpha, undo.splits = "sdundo", undo.SD = undo.SD, verbose = 2)
-EOF
-
-echo "Pipeline completed successfully."
+echo "Preprocessing and normalization completed successfully."
